@@ -30,12 +30,13 @@ import os
 import random
 from itertools import chain
 from pathlib import Path
+from datetime import timedelta
 
 import datasets
 import torch
 from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import set_seed, InitProcessGroupKwargs
 from datasets import load_dataset
 from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
@@ -54,7 +55,7 @@ from transformers import (
 )
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
-
+from utils.data_collator import AlbertDataCollatorForWholeWordMask
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.27.0.dev0")
@@ -263,8 +264,9 @@ def main():
     if args.with_tracking:
         accelerator_log_kwargs["log_with"] = args.report_to
         accelerator_log_kwargs["logging_dir"] = args.output_dir
-
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
+    
+    kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=9000))
+    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, kwargs_handlers=[kwargs], **accelerator_log_kwargs)
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -501,7 +503,7 @@ def main():
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=args.mlm_probability)
+    data_collator = AlbertDataCollatorForWholeWordMask(tokenizer=tokenizer, mlm_probability=args.mlm_probability)
 
     # DataLoaders creation:
     train_dataloader = DataLoader(
